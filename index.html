@@ -1,0 +1,102 @@
+<!doctype html>
+<html>
+    <head>
+        <title>TorFlow Next Gen</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+
+        <script src="https://unpkg.com/deck.gl@latest/dist.min.js"></script>
+
+        <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@^2.4/dist/maplibre-gl.css" />
+        <script src="https://unpkg.com/maplibre-gl@^2.4/dist/maplibre-gl.js"></script>
+        <style>
+            body {
+                margin: 0;
+                padding: 0;
+            }
+            #map {
+                height: 100vh;
+                width: 100vw;
+            }
+        </style>
+    </head>
+
+    <body>
+        <div id="map"></div>
+    </body>
+
+    <script type="text/javascript">
+        // Define your API keys as constants at the top of your file
+        const ipLocKey = '320d5002881d45c9b59ad1898939c8c6'; // Replace with your actual API key
+        const mapTilerkey = 'VgvDVysRV8GL8cNgb0KZ';
+
+        // Use a function to construct the URL, which allows for more flexibility if additional parameters are needed later
+        function constructGeoLocationURL(apiKey) {
+            return `https://api.ipgeolocation.io/ipgeo?apiKey=${apiKey}`;
+        }
+
+        // Fetch IP Data from the geolocation service
+        async function fetchIPData(apiKey) {
+            const url = constructGeoLocationURL(apiKey);
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return await response.json();
+            } catch (error) {
+                console.error('There has been a problem with your fetch operation:', error);
+            }
+        }
+
+        // Initialize the map using deck.gl
+        async function initializeMap(ipData, apiKey) {
+            if (!ipData) {
+                console.error('IP data is required to initialize the map.');
+                return;
+            }
+
+
+            var map = new maplibregl.Map({
+                container: 'map', // container id
+                style: `https://api.maptiler.com/maps/streets-v2-dark/style.json?key=${apiKey}`, // style URL
+                center: [parseFloat(ipData.longitude), parseFloat(ipData.latitude)], // starting position [lng, lat]
+                zoom: 2 // starting zoom
+            });
+
+            let marker = new maplibregl.Marker({
+                color: '#3a3fde',
+            })
+            .setLngLat([parseFloat(ipData.longitude), parseFloat(ipData.latitude)])
+            .addTo(map);
+
+            // Create deck.gl map
+            /* let deckgl = new deck.DeckGL({
+                container: 'map',
+                map: maplibregl,
+                mapStyle: `https://api.maptiler.com/maps/streets-v2-dark/style.json?key=${mapTilerkey}`,
+                initialViewState: {
+                longitude: parseFloat(ipData.longitude),
+                latitude: parseFloat(ipData.latitude),
+                zoom: 5,
+                pitch: 0
+                },
+                controller: true
+            });
+            */
+            return map;
+        }
+
+        // Main initialization function
+        async function initialize() {
+            const ipData = await fetchIPData(ipLocKey);
+
+            if (ipData) {
+                console.log(ipData); // Here's your geolocation data
+                initializeMap(ipData, mapTilerkey);
+            }
+        }
+
+        initialize();
+    </script>
+</html>
