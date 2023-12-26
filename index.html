@@ -7,8 +7,8 @@
 
         <script src="https://unpkg.com/deck.gl@latest/dist.min.js"></script>
 
-        <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@^2.4/dist/maplibre-gl.css" />
-        <script src="https://unpkg.com/maplibre-gl@^2.4/dist/maplibre-gl.js"></script>
+        <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" />
+        <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
         <style>
             body {
                 margin: 0;
@@ -57,12 +57,81 @@
             }
 
 
-            var map = new maplibregl.Map({
+            const map = new maplibregl.Map({
                 container: 'map', // container id
                 style: `https://api.maptiler.com/maps/streets-v2-dark/style.json?key=${apiKey}`, // style URL
                 center: [parseFloat(ipData.longitude), parseFloat(ipData.latitude)], // starting position [lng, lat]
-                zoom: 2 // starting zoom
+                zoom: 2, // starting zoom
+                antialias: true
             });
+
+            // The 'building' layer in the streets vector source contains building-height
+            // data from OpenStreetMap.
+            map.on('load', () => {
+                // Insert the layer beneath any symbol layer.
+                const layers = map.getStyle().layers;
+
+                let labelLayerId;
+                for (let i = 0; i < layers.length; i++) {
+                    if (layers[i].type === 'symbol' && layers[i].layout['text-field']) {
+                        labelLayerId = layers[i].id;
+                        break;
+                    }
+                }
+
+                map.addSource('openmaptiles', {
+                    url: `https://api.maptiler.com/tiles/v3/tiles.json?key=${mapTilerkey}`,
+                    type: 'vector',
+                });
+
+                map.addLayer(
+                    {
+                        'id': '3d-buildings',
+                        'source': 'openmaptiles',
+                        'source-layer': 'building',
+                        'type': 'fill-extrusion',
+                        'minzoom': 15,
+                        'paint': {
+                            'fill-extrusion-color': [
+                                'interpolate',
+                                ['linear'],
+                                ['get', 'render_height'], 0, 'lightgray', 200, 'royalblue', 400, 'lightblue'
+                            ],
+                            'fill-extrusion-height': [
+                                'interpolate',
+                                ['linear'],
+                                ['zoom'],
+                                15,
+                                0,
+                                16,
+                                ['get', 'render_height']
+                            ],
+                            'fill-extrusion-base': ['case',
+                                ['>=', ['get', 'zoom'], 16],
+                                ['get', 'render_min_height'], 0
+                            ]
+                        }
+                    },
+                    labelLayerId
+                );
+            })
+
+            map.addControl(new maplibregl.NavigationControl({
+                showCompass: true,
+                showZoom: true,
+                visualizePitch: true,
+            }), 'top-right');
+
+            map.addControl(new maplibregl.GeolocateControl({
+                positionOptions: {
+                    enableHighAccuracy: true
+                },
+                trackUserLocation: true
+            }));
+
+            map.addControl(new maplibregl.FullscreenControl({
+                container: document.querySelector('body')
+            }));
 
             let marker = new maplibregl.Marker({
                 color: '#3a3fde',
@@ -70,20 +139,6 @@
             .setLngLat([parseFloat(ipData.longitude), parseFloat(ipData.latitude)])
             .addTo(map);
 
-            // Create deck.gl map
-            /* let deckgl = new deck.DeckGL({
-                container: 'map',
-                map: maplibregl,
-                mapStyle: `https://api.maptiler.com/maps/streets-v2-dark/style.json?key=${mapTilerkey}`,
-                initialViewState: {
-                longitude: parseFloat(ipData.longitude),
-                latitude: parseFloat(ipData.latitude),
-                zoom: 5,
-                pitch: 0
-                },
-                controller: true
-            });
-            */
             return map;
         }
 
@@ -93,7 +148,7 @@
 
             if (ipData) {
                 console.log(ipData); // Here's your geolocation data
-                initializeMap(ipData, mapTilerkey);
+                let map = initializeMap(ipData, mapTilerkey);
             }
         }
 
