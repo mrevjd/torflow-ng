@@ -9,6 +9,9 @@
 
         <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" />
         <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+        <script type="module">
+            import { ParticleLayer } from '/utils/ParticleLayer.js';
+        </script>
         <style>
             body {
                 margin: 0;
@@ -114,6 +117,10 @@
                     },
                     labelLayerId
                 );
+
+                const canvas = document.getElementById("map");
+                const gl = canvas.getContext("webgl");
+                map.addLayer(new ParticleLayer());
             })
 
             map.addControl(new maplibregl.NavigationControl({
