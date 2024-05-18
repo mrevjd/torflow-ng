@@ -3,7 +3,7 @@
 // Initialize the map
 const map = new maplibregl.Map({
     container: "map",
-    style: "https://api.maptiler.com/maps/streets/style.json?key=" + mapTilerkey,
+    style: "https://api.maptiler.com/maps/streets/style.json?key=" + mapTilerKey,
     center: [-74.5, 40],
     zoom: 9,
 });
@@ -13,7 +13,7 @@ const source = [-74.0059, 40.7128]; // New York, NY
 const destination = [-73.9865, 40.7306]; // Brooklyn, NY
 
 // Create a web worker for particle simulation
-const particleWorker = new Worker("helpers/particle-worker.js");
+const particleWorker = new Worker("./helpers/particle-worker.js");
 
 // Listen for messages from the worker
 particleWorker.onmessage = (event) => {
@@ -36,19 +36,18 @@ animate();
 
 // WebGL particle rendering code
 const canvas = document.createElement("canvas");
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+canvas.style.position = "absolute";
+canvas.style.top = "0";
+canvas.style.left = "0";
+canvas.style.pointerEvents = "none"; // Allow mouse events to pass through the canvas
 const gl = canvas.getContext("webgl");
 
 const vertexShaderSource = `
   attribute vec2 a_position;
-  uniform vec2 u_resolution;
 
   void main() {
-    vec2 zeroToOne = a_position / u_resolution;
-    vec2 clipSpace = zeroToOne * 2.0 - 1.0;
-    gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);
-    gl_PointSize = 4.0;
+    gl_Position = vec4(a_position * 2.0 - 1.0, 0, 1);
+    gl_PointSize = 8.0;
   }
 `;
 
@@ -69,7 +68,6 @@ const program = createProgram(gl, vertexShader, fragmentShader);
 const positionBuffer = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
 
-const resolutionUniformLocation = gl.getUniformLocation(program, "u_resolution");
 const colorUniformLocation = gl.getUniformLocation(program, "u_color");
 const intensityUniformLocation = gl.getUniformLocation(program, "u_intensity");
 
@@ -89,6 +87,9 @@ function createProgram(gl, vertexShader, fragmentShader) {
 }
 
 function renderParticles(particles, map) {
+    canvas.width = map.getCanvas().clientWidth;
+    canvas.height = map.getCanvas().clientHeight;
+
     gl.viewport(0, 0, canvas.width, canvas.height);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
@@ -98,10 +99,12 @@ function renderParticles(particles, map) {
     const positions = new Float32Array(particles.length * 2);
     for (let i = 0; i < particles.length; i++) {
         const particle = particles[i];
-        const [lng, lat] = particle.position;
-        const [x, y] = map.project([lng, lat]);
-        positions[i * 2] = x;
-        positions[i * 2 + 1] = y;
+        const particlePosition = particle.position;
+        const lng = particlePosition[0];
+        const lat = particlePosition[1];
+        const pixelCoords = map.project([lng, lat]);
+        positions[i * 2] = pixelCoords.x / canvas.width;
+        positions[i * 2 + 1] = pixelCoords.y / canvas.height;
     }
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
@@ -109,8 +112,6 @@ function renderParticles(particles, map) {
     const positionAttributeLocation = gl.getAttribLocation(program, "a_position");
     gl.vertexAttribPointer(positionAttributeLocation, 2, gl.FLOAT, false, 0, 0);
     gl.enableVertexAttribArray(positionAttributeLocation);
-
-    gl.uniform2f(resolutionUniformLocation, canvas.width, canvas.height);
 
     const particleCount = particles.length;
     const maxParticles = 1000;
@@ -122,9 +123,12 @@ function renderParticles(particles, map) {
 
     gl.drawArrays(gl.POINTS, 0, particles.length);
 
-    const overlay = new maplibregl.Marker({
-        element: canvas,
-    }).setLngLat(map.getCenter());
-
-    overlay.addTo(map);
+    // Add the canvas as an overlay
+    const mapContainer = map.getContainer();
+    mapContainer.appendChild(canvas);
 }
+
+// Wait for the map to load before rendering particles
+map.once("load", () => {
+    renderParticles([], map); // Initial render with empty particles
+});
