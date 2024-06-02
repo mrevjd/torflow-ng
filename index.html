@@ -1,125 +1,156 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <title>deck.gl ArcLayer Example</title>
-
-    <script src="https://unpkg.com/deck.gl@^9.0.0/dist.min.js"></script>
-    <script src="https://d3js.org/d3.v5.min.js"></script>
-    <script src="https://unpkg.com/maplibre-gl@3.6.0/dist/maplibre-gl.js"></script>
-
-    <link href="https://unpkg.com/maplibre-gl@3.6.0/dist/maplibre-gl.css" rel="`stylesheet" />
-    <style type="text/css">
-      body {
-        width: 100vw;
-        height: 100vh;
-        margin: 0;
-        overflow: hidden;
-      }
-      .deck-tooltip {
-        font-family: Helvetica, Arial, sans-serif;
-        padding: 6px !important;
-        margin: 8px;
-        max-width: 300px;
-        font-size: 10px;
-      }
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>World Map with Particles</title>
+    <link href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js"></script>
+    <script src="https://unpkg.com/deck.gl@8.8.24/dist.min.js"></script>
+    <script src="https://unpkg.com/@luma.gl/core@8.4.5/dist.min.js"></script>
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { width: 100%; height: 100vh; }
     </style>
-  </head>
+</head>
+<body>
+    <div id="map"></div>
 
-  <body>
-  </body>
+    <script>
+        // Initialize the MapLibre map
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+            center: [0, 0],
+            zoom: 2
+        });
 
-  <script type="text/javascript">
+        // Define initial view state
+        const initialViewState = {
+            longitude: 0,
+            latitude: 0,
+            zoom: 2,
+            pitch: 0,
+            spy: 0,
+            bearing: 0
+        };
 
-    const {DeckGL, GeoJsonLayer, ArcLayer} = deck;
+        // Initialize Deck.gl
+        const deckGL = new deck.DeckGL({
+            initialViewState,
+            controller: true,
+            layers: [],
+            onViewStateChange: ({ viewState }) => {
+                map.jumpTo({
+                    center: [viewState.longitude, viewState.latitude],
+                    zoom: viewState.zoom,
+                    bearing: viewState.bearing,
+                    pitch: viewState.pitch
+                });
+            }
+        });
 
-    const inFlowColors = [
-      [255, 255, 204],
-      [199, 233, 180],
-      [127, 205, 187],
-      [65, 182, 196],
-      [29, 145, 192],
-      [34, 94, 168],
-      [12, 44, 132]
-    ];
+        map.on('load', () => {
+            const locations = [
+                { id: 'A', coordinates: [-74.006, 40.7128] }, // New York
+                { id: 'B', coordinates: [2.3522, 48.8566] },  // Paris
+                { id: 'C', coordinates: [139.6917, 35.6895] } // Tokyo
+            ];
 
-    const outFlowColors = [
-      [255, 255, 178],
-      [254, 217, 118],
-      [254, 178, 76],
-      [253, 141, 60],
-      [252, 78, 42],
-      [227, 26, 28],
-      [177, 0, 38]
-    ];
+            const connections = [
+                { source: 'A', target: 'B', count: 20 },
+                { source: 'A', target: 'C', count: 10 },
+                { source: 'B', target: 'C', count: 5 }
+            ];
 
-    const deckgl = new DeckGL({
-      mapStyle: 'https://basemaps.cartocdn.com/gl/positron-nolabels-gl-style/style.json',
-      initialViewState: {
-        longitude: -100,
-        latitude: 40.7,
-        zoom: 3,
-        maxZoom: 15,
-        pitch: 30,
-        bearing: 30
-      },
-      controller: true,
-      layers: [],
-      getTooltip: ({object}) => object && object.properties.name
-    });
+            // Mapping locations to IDs for easy lookup
+            const locationLookup = locations.reduce((acc, loc) => {
+                acc[loc.id] = loc.coordinates;
+                return acc;
+            }, {});
 
-    function getArcLayer(data, selectedFeature) {
+            // Initialize particles with progress state
+            const particles = connections.flatMap(conn => {
+                const particleArray = [];
+                for (let i = 0; i < conn.count; i++) {
+                    particleArray.push({
+                        ...conn,
+                        sourcePos: locationLookup[conn.source],
+                        targetPos: locationLookup[conn.target],
+                        progress: Math.random() // Initial random progress for each particle
+                    });
+                }
+                return particleArray;
+            });
 
-      const {flows, centroid} = selectedFeature.properties;
-      const arcs = Object.keys(flows).map(toId => {
-      const f = data.features[toId];
-      return {
-        source: centroid,
-        target: f.properties.centroid,
-        value: flows[toId]
-      };
-      });
+            // Method to animate particles
+            const animateParticles = (particles, { tick }) => {
+                particles.forEach(particle => {
+                    particle.progress += tick * 0.001; // Adjust this factor for speed
+                    if (particle.progress > 1) particle.progress = 0; // Reset progress
+                });
+            };
 
-      const scale = d3.scaleQuantile()
-        .domain(arcs.map(a => Math.abs(a.value)))
-        .range(inFlowColors.map((c, i) => i));
+            // Create an ArcLayer for connection lines
+            const arcLayer = new deck.ArcLayer({
+                id: 'arc-layer',
+                data: connections,
+                getSourcePosition: d => locationLookup[d.source],
+                getTargetPosition: d => locationLookup[d.target],
+                getSourceColor: [0, 128, 255],
+                getTargetColor: [0, 255, 128],
+                getWidth: d => Math.sqrt(d.count)
+            });
 
-        arcs.forEach(a => {
-        a.gain = Math.sign(a.value);
-        a.quantile = scale(Math.abs(a.value));
-      });
+            // Create a ScatterplotLayer for animated particles
+            const particleLayer = new deck.ScatterplotLayer({
+                id: 'particle-layer',
+                data: particles,
+                getPosition: d => {
+                    // Interpolate position between source and target based on progress
+                    const [sx, sy] = d.sourcePos;
+                    const [tx, ty] = d.targetPos;
+                    const x = sx + d.progress * (tx - sx);
+                    const y = sy + d.progress * (ty - sy);
+                    return [x, y];
+                },
+                getFillColor: [255, 0, 0], // Particle color (red)
+                getRadius: 5 // Particle radius
+            });
 
-      return new ArcLayer({
-        id: 'arc',
-        data: arcs,
-        getSourcePosition: d => d.source,
-        getTargetPosition: d => d.target,
-        getSourceColor: d => (d.gain > 0 ? inFlowColors : outFlowColors)[d.quantile],
-        getTargetColor: d => (d.gain > 0 ? outFlowColors : inFlowColors)[d.quantile],
-        strokeWidth: 4
-      });
-    }
+            // Function to update particles and create an animation loop
+            const animationLoop = new deck.AnimationLoop({
+                onInitialize: ({ gl }) => {
+                    deckGL.setProps({ gl }); // Use the same WebGL context
+                    return { tick: 0 };
+                },
+                onRender: ({ tick }) => {
+                    animateParticles(particles, { tick });
+                    // Update Deck.gl layers with animated particles
+                    deckGL.setProps({
+                        layers: [arcLayer, particleLayer]
+                    });
+                }
+            });
 
-    function renderLayers(data, selectedFeature) {
+            animationLoop.start();
 
-      selectedFeature = selectedFeature || data.features.find(f => f.properties.name === 'Los Angeles, CA');
-      const arcLayer = getArcLayer(data, selectedFeature);
-      const countyLayer = new GeoJsonLayer({
-        id: 'geojson',
-        data,
-        stroked: false,
-        filled: true,
-        autoHighlight: true,
-        pickable: true,
-        getFillColor: () => [0, 0, 0, 0],
-        onClick: info => renderLayers(data, info.object)
-      });
+            console.log('Deck.gl layers created and animation loop started');
+        });
 
-      deckgl.setProps({ layers: [countyLayer, arcLayer] });
-    }
-
-    fetch('https://raw.githubusercontent.com/visgl/deck.gl-data/master/examples/arc/counties.json')
-    .then(res => res.json())
-    .then(data => renderLayers(data))
-
-  </script>
+        // Synchronization function for MapLibre to Deck.gl
+        map.on('move', () => {
+            const center = map.getCenter();
+            deckGL.setProps({
+                viewState: {
+                    longitude: center.lng,
+                    latitude: center.lat,
+                    zoom: map.getZoom(),
+                    bearing: map.getBearing(),
+                    pitch: map.getPitch()
+                }
+            });
+        });
+    </script>
+</body>
 </html>
