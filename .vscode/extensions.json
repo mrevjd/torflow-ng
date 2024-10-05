@@ -2,6 +2,9 @@
   "recommendations": [
     "Vue.volar",
     "dbaeumer.vscode-eslint",
-    "esbenp.prettier-vscode"
+    "esbenp.prettier-vscode",
+    "piotrpalarz.vscode-gitignore-generator",
+    "formulahendry.auto-complete-tag",
+    "wmaurer.change-case"
   ]
 }

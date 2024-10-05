@@ -28,3 +28,7 @@ coverage
 *.sw?
 
 *.tsbuildinfo
+scripts/consensuses/*
+scripts/extra-infos/*
+scripts/server-descriptors/*
+scripts/data/*
